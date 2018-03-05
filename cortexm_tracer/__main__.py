@@ -1,4 +1,5 @@
 import sys
+import os
 import argparse
 import struct
 from cortexm_tracer import MapReaderIAR
@@ -87,6 +88,8 @@ def main():
     if parsed_args.file is None:
         sys.stderr.write('Missing input file. Reading stdin\n')
         f = sys.stdin
+        # reopen stdin in binary mode
+        f = os.fdopen(f.fileno(), 'rb', 0)
     else:
         f = open(parsed_args.file[0], "rb")
     if parsed_args.map_file is None:
