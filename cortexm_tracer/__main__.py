@@ -19,7 +19,7 @@ def _print_data(context_ba, pc_ba, lr_ba):
     lr = struct.unpack(">L", lr_ba)
     cur_func = reader.find_func_from_addr(pc[0])
     prev_func = reader.find_func_from_addr(lr[0])
-    print("Context: {:2}, PC: {:08x} (in {}), LR: {:08x} (in {})".format(context[0], pc[0], cur_func['name'], lr[0], prev_func['name']))
+    print("Context: {:2}: {} <- {}".format(context[0], cur_func['name'], prev_func['name']))
     sys.stdout.flush()
 
 def _read_data(f):
