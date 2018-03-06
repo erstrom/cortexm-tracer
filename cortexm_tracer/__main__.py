@@ -2,6 +2,7 @@ import sys
 import os
 import argparse
 import struct
+import datetime
 from cortexm_tracer import MapReaderIAR
 
 
@@ -13,26 +14,31 @@ STATE_READ_LR = 3
 def _print_data(context_ba, pc_ba, lr_ba):
 
     global reader
+    global prev_time
 
+    cur_time = datetime.datetime.now()
+    delta_time = cur_time - prev_time
+    prev_time = cur_time
     context = struct.unpack(">B", context_ba)
     pc = struct.unpack(">L", pc_ba)
     lr = struct.unpack(">L", lr_ba)
     cur_func = reader.find_func_from_addr(pc[0])
     prev_func = reader.find_func_from_addr(lr[0])
-    print("Context: {:2}: {} <- {}".format(context[0], cur_func['name'], prev_func['name']))
+    print("Context: {:2}    {:2}.{:06} {} <- {}".format(context[0], delta_time.seconds, delta_time.microseconds, cur_func['name'], prev_func['name']))
     sys.stdout.flush()
 
 def _read_data(f):
 
     global parsed_args
     global reader
-
+    global prev_time
 
     try:
         read_data = ""
         pc_cnt = 0
         lr_cnt = 0
         state = STATE_READ_MAGIC
+        prev_time = datetime.datetime.now()
         while True:
             read_data = f.read(1)
 
