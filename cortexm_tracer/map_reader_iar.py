@@ -21,7 +21,7 @@ import bisect
 
 
 iar_funcline_regex1 = "([a-zA-Z0-9_]+)(.*)"
-iar_funcline_regex2 = "\s*0x([a-fA-F0-9]{8})\s+0x([a-fA-F0-9]+)\s+(\w+)"
+iar_funcline_regex2 = "\s*0x([a-fA-F0-9]{8})\s+0x([a-fA-F0-9]+)\s+(\w+)\s+\w+\s+(\w+)"
 
 iar_funcline_regex1_compiled = re.compile(iar_funcline_regex1)
 iar_funcline_regex2_compiled = re.compile(iar_funcline_regex2)
@@ -52,8 +52,9 @@ class MapReaderIAR:
             addr = int(match.group(1), 16)
             size = int(match.group(2), 16)
             type_str = match.group(3)
+            object_file = match.group(4)
 
-            return (func_name, addr, size, type_str)
+            return (func_name, addr, size, type_str, object_file)
 
         else:
             match = iar_funcline_regex2_compiled.match(line)
@@ -63,8 +64,9 @@ class MapReaderIAR:
             addr = int(match.group(1), 16)
             size = int(match.group(2), 16)
             type_str = match.group(3)
+            object_file = match.group(4)
 
-            return (addr, size, type_str)
+            return (addr, size, type_str, object_file)
 
 
     def __read_func_list(self):
@@ -84,16 +86,16 @@ class MapReaderIAR:
                 func_name = parse_res
                 self.part2 = True
                 continue
-            elif not self.part2 and len(parse_res) == 4:
-                (func_name, addr, size, type_str) = parse_res
-            elif self.part2 and len(parse_res) == 3:
-                (addr, size, type_str) = parse_res
+            elif not self.part2 and len(parse_res) == 5:
+                (func_name, addr, size, type_str, object_file) = parse_res
+            elif self.part2 and len(parse_res) == 4:
+                (addr, size, type_str, object_file) = parse_res
                 self.part2 = False
             else:
                 # Invalid result
                 continue
 
-            funcs.append({'addr':addr, 'name':func_name, 'type': type_str, 'size': size})
+            funcs.append({'addr':addr, 'name':(object_file + '.' + func_name), 'type': type_str, 'size': size})
 
         # Sort the funcs list
         self.funcs = sorted(funcs, key=lambda k: k['addr'])
