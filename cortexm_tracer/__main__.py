@@ -4,6 +4,7 @@ import argparse
 import struct
 import datetime
 from cortexm_tracer import MapReaderIAR
+from cortexm_tracer import InterruptContext_STM32
 
 
 STATE_READ_MAGIC = 0
@@ -24,7 +25,9 @@ def _print_data(context_ba, pc_ba, lr_ba):
     lr = struct.unpack(">L", lr_ba)
     cur_func = reader.find_func_from_addr(pc[0])
     prev_func = reader.find_func_from_addr(lr[0])
-    print("Context: {:2}    {:2}.{:06} {} <- {}".format(context[0], delta_time.seconds, delta_time.microseconds, cur_func['name'], prev_func['name']))
+    context_name = InterruptContext_STM32.getInterruptContext(context[0])
+    context = "{} ({}):".format(context_name, context[0])
+    print("{:15}   {:2}.{:06} {} <- {}".format(context, delta_time.seconds, delta_time.microseconds, cur_func['name'], prev_func['name']))
     sys.stdout.flush()
 
 def _read_data(f):
