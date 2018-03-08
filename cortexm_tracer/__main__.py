@@ -40,6 +40,7 @@ def _read_data(f):
         read_data = ""
         pc_cnt = 0
         lr_cnt = 0
+        resync_cnt = 0
         state = STATE_READ_MAGIC
         prev_time = datetime.datetime.now()
         while True:
@@ -48,6 +49,14 @@ def _read_data(f):
             if state == STATE_READ_MAGIC:
                 if read_data == b'\xc0':
                     state = STATE_READ_CONTEXT
+                    if resync_cnt > 0:
+                        print("*** Resync after {} bytes".format(resync_cnt))
+                        resync_cnt = 0
+                else:
+                    if resync_cnt == 0:
+                        print("*** WARNING ***")
+                        print("*** Missing syncword!")
+                    resync_cnt += 1
             elif state == STATE_READ_CONTEXT:
                 context = read_data
                 state = STATE_READ_PC
