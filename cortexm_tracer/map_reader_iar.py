@@ -111,5 +111,9 @@ class MapReaderIAR:
         keys = [func['addr'] for func in self.funcs]
         i = bisect.bisect_left(keys, addr)
         func = self.funcs[i - 1]
-        return func
+        func_end_addr = func['addr'] + func['size']
+        if addr > func_end_addr:
+            return None
+        else:
+            return func
 

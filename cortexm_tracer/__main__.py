@@ -24,10 +24,18 @@ def _print_data(context_ba, pc_ba, lr_ba):
     pc = struct.unpack(">L", pc_ba)
     lr = struct.unpack(">L", lr_ba)
     cur_func = reader.find_func_from_addr(pc[0])
+    if cur_func:
+        cur_func_name = cur_func['name']
+    else:
+        cur_func_name = "<unknown function>"
     prev_func = reader.find_func_from_addr(lr[0])
+    if prev_func:
+        prev_func_name = prev_func['name']
+    else:
+        prev_func_name = "<unknown function>"
     context_name = InterruptContext_STM32.getInterruptContext(context[0])
     context = "{} ({}):".format(context_name, context[0])
-    print("{:15}   {:2}.{:06} {} <- {}".format(context, delta_time.seconds, delta_time.microseconds, cur_func['name'], prev_func['name']))
+    print("{:15}   {:2}.{:06} {} <- {}".format(context, delta_time.seconds, delta_time.microseconds, cur_func_name, prev_func_name))
     sys.stdout.flush()
 
 def _read_data(f):
