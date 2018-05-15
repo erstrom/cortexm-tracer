@@ -53,6 +53,8 @@ def _read_data(f):
         prev_time = datetime.datetime.now()
         while True:
             read_data = f.read(1)
+            if len(read_data) == 0:
+                break
 
             if state == STATE_READ_MAGIC:
                 if read_data == b'\xc0':
