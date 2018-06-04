@@ -30,7 +30,7 @@ binary data instead of ASCII.
 
 Below is an outline of one chunk of trace data::
 
-    +------------------+--------+--------+--------+
+    +----------+-------+--------+--------+--------+
     | syncbits | flags | invect |   PC   |   LR   |
     +----------+-------+--------+--------+--------+
      2 bits     5 bits  9 bits   32 bits  32 bits
