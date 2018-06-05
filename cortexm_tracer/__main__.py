@@ -12,6 +12,17 @@ STATE_READ_CONTEXT = 1
 STATE_READ_PC = 2
 STATE_READ_LR = 3
 
+STATE_READ_CUSTOM_DATA_ADDR = 4
+STATE_READ_CUSTOM_DATA_LEN = 5
+STATE_READ_CUSTOM_DATA = 6
+
+# Trace flags
+TRACE_FLAG_CUSTOM_DATA = 1
+
+# Trace types
+TRACE_TYPE_FUNC = 0
+TRACE_TYPE_CUSTOM_DATA = 1
+
 def _print_data(context_ba, pc_ba, lr_ba):
 
     global reader
@@ -38,17 +49,105 @@ def _print_data(context_ba, pc_ba, lr_ba):
     print("{:15}   {:2}.{:06} {} <- {}".format(context, delta_time.seconds, delta_time.microseconds, cur_func_name, prev_func_name))
     sys.stdout.flush()
 
+def _print_custom_data(custom_data_ba, custom_data_addr, data_len):
+
+    print("Data dump: addr: 0x{:08x} len {} bytes".format(custom_data_addr, data_len))
+    for idx, data in enumerate(custom_data_ba):
+        print("  {:04}:  {:02x}".format(idx, data))
+
+def _read_func_data(read_data):
+
+    global state
+    global pc_cnt
+    global lr_cnt
+    global pc
+    global lr
+    global context
+
+    if state == STATE_READ_CONTEXT:
+        context = read_data
+        state = STATE_READ_PC
+        pc = bytearray()
+    elif state == STATE_READ_PC:
+        pc.extend(read_data)
+        pc_cnt += 1
+        if pc_cnt == 4:
+            state = STATE_READ_LR
+            lr = bytearray()
+    elif state == STATE_READ_LR:
+        lr.extend(read_data)
+        lr_cnt += 1
+        if lr_cnt == 4:
+            _print_data(context, pc, lr)
+            pc_cnt = 0
+            lr_cnt = 0
+            state = STATE_READ_MAGIC
+
+def _read_custom_data(read_data):
+
+    global state
+    global custom_data_len_cnt
+    global custom_data_cnt
+    global custom_data_addr_cnt
+    global custom_data
+    global custom_data_len
+    global custom_data_addr
+    global custom_data_addr_list
+
+    if state == STATE_READ_CUSTOM_DATA_ADDR:
+        custom_data_addr_list.append(read_data[0])
+        custom_data_addr_cnt += 1
+        if custom_data_addr_cnt == 4:
+            custom_data_addr = custom_data_addr_list[0] << 24 | \
+                               custom_data_addr_list[1] << 16 | \
+                               custom_data_addr_list[2] << 8 | \
+                               custom_data_addr_list[3]
+            custom_data_addr_list = []
+            custom_data_addr_cnt = 0
+            custom_data_len_cnt = 0
+            state = STATE_READ_CUSTOM_DATA_LEN
+    elif state == STATE_READ_CUSTOM_DATA_LEN:
+        if custom_data_len_cnt == 0:
+            custom_data_len = read_data[0] << 8
+            custom_data_len_cnt += 1
+        elif custom_data_len_cnt == 1:
+            custom_data_len |= read_data[0]
+            state = STATE_READ_CUSTOM_DATA
+            custom_data_cnt = 0
+            custom_data_len_cnt = 0
+            custom_data = bytearray()
+    elif state == STATE_READ_CUSTOM_DATA:
+        custom_data.extend(read_data)
+        custom_data_cnt += 1
+        if custom_data_cnt == custom_data_len:
+            _print_custom_data(custom_data, custom_data_addr, custom_data_len)
+            custom_data_cnt = 0
+            custom_data_len_cnt = 0
+            custom_data_addr_cnt = 0
+            state = STATE_READ_MAGIC
+
 def _read_data(f):
 
     global parsed_args
     global reader
     global prev_time
+    global state
+    global pc_cnt
+    global lr_cnt
+    global custom_data_len_cnt
+    global custom_data_cnt
+    global custom_data_addr_cnt
+    global custom_data_addr_list
 
     try:
         read_data = ""
         pc_cnt = 0
         lr_cnt = 0
         resync_cnt = 0
+        custom_data_len_cnt = 0
+        custom_data_cnt = 0
+        custom_data_addr_cnt = 0
+        custom_data_addr_list = []
         state = STATE_READ_MAGIC
         prev_time = datetime.datetime.now()
         while True:
@@ -57,8 +156,15 @@ def _read_data(f):
                 break
 
             if state == STATE_READ_MAGIC:
-                if read_data == b'\xc0':
-                    state = STATE_READ_CONTEXT
+                read_data_magic = read_data[0] & 0xfc
+                read_data_flags = (read_data[0] & ~0xfc) >> 1
+                if read_data_magic == 0xc0:
+                    if read_data_flags & TRACE_FLAG_CUSTOM_DATA:
+                        trace_type = TRACE_TYPE_CUSTOM_DATA
+                        state = STATE_READ_CUSTOM_DATA_ADDR
+                    else:
+                        trace_type = TRACE_TYPE_FUNC
+                        state = STATE_READ_CONTEXT
                     if resync_cnt > 0:
                         print("*** Resync after {} bytes".format(resync_cnt))
                         resync_cnt = 0
@@ -67,24 +173,14 @@ def _read_data(f):
                         print("*** WARNING ***")
                         print("*** Missing syncword!")
                     resync_cnt += 1
-            elif state == STATE_READ_CONTEXT:
-                context = read_data
-                state = STATE_READ_PC
-                pc = bytearray()
-            elif state == STATE_READ_PC:
-                pc.extend(read_data)
-                pc_cnt += 1
-                if pc_cnt == 4:
-                    state = STATE_READ_LR
-                    lr = bytearray()
-            elif state == STATE_READ_LR:
-                lr.extend(read_data)
-                lr_cnt += 1
-                if lr_cnt == 4:
-                    _print_data(context, pc, lr)
-                    pc_cnt = 0
-                    lr_cnt = 0
-                    state = STATE_READ_MAGIC
+            else:
+                if trace_type == TRACE_TYPE_FUNC:
+                    _read_func_data(read_data)
+                elif trace_type == TRACE_TYPE_CUSTOM_DATA:
+                    _read_custom_data(read_data)
+                else:
+                    # Unknown trace type. Ignore
+                    state == STATE_READ_MAGIC
     except KeyboardInterrupt:
         sys.stdout.flush()
         sys.stderr.flush()
