@@ -16,12 +16,17 @@ STATE_READ_CUSTOM_DATA_ADDR = 4
 STATE_READ_CUSTOM_DATA_LEN = 5
 STATE_READ_CUSTOM_DATA = 6
 
+STATE_READ_LOG_DATA_LEN = 7
+STATE_READ_LOG_DATA = 8
+
 # Trace flags
 TRACE_FLAG_CUSTOM_DATA = 1
+TRACE_FLAG_LOG_DATA = 2
 
 # Trace types
 TRACE_TYPE_FUNC = 0
 TRACE_TYPE_CUSTOM_DATA = 1
+TRACE_TYPE_LOG_DATA = 2
 
 def _print_data(context_ba, pc_ba, lr_ba):
 
@@ -54,6 +59,10 @@ def _print_custom_data(custom_data_ba, custom_data_addr, data_len):
     print("Data dump: addr: 0x{:08x} len {} bytes".format(custom_data_addr, data_len))
     for idx, data in enumerate(custom_data_ba):
         print("  {:04}:  {:02x}".format(idx, data))
+
+def _print_log_data(log_data_ba, log_data_len):
+
+    print("LOG: {}".format(log_data_ba.decode("utf-8")))
 
 def _read_func_data(read_data):
 
@@ -126,6 +135,33 @@ def _read_custom_data(read_data):
             custom_data_addr_cnt = 0
             state = STATE_READ_MAGIC
 
+def _read_log_data(read_data):
+
+    global state
+    global log_data_len_cnt
+    global log_data_cnt
+    global log_data
+    global log_data_len
+
+    if state == STATE_READ_LOG_DATA_LEN:
+        if log_data_len_cnt == 0:
+            log_data_len = read_data[0] << 8
+            log_data_len_cnt += 1
+        elif log_data_len_cnt == 1:
+            log_data_len |= read_data[0]
+            state = STATE_READ_LOG_DATA
+            log_data_cnt = 0
+            log_data_len_cnt = 0
+            log_data = bytearray()
+    elif state == STATE_READ_LOG_DATA:
+        log_data.extend(read_data)
+        log_data_cnt += 1
+        if log_data_cnt == log_data_len:
+            _print_log_data(log_data, log_data_len)
+            log_data_cnt = 0
+            log_data_len_cnt = 0
+            state = STATE_READ_MAGIC
+
 def _read_data(f):
 
     global parsed_args
@@ -138,6 +174,8 @@ def _read_data(f):
     global custom_data_cnt
     global custom_data_addr_cnt
     global custom_data_addr_list
+    global log_data_len_cnt
+    global log_data_cnt
 
     try:
         read_data = ""
@@ -146,6 +184,8 @@ def _read_data(f):
         resync_cnt = 0
         custom_data_len_cnt = 0
         custom_data_cnt = 0
+        log_data_len_cnt = 0
+        log_data_cnt = 0
         custom_data_addr_cnt = 0
         custom_data_addr_list = []
         state = STATE_READ_MAGIC
@@ -162,6 +202,9 @@ def _read_data(f):
                     if read_data_flags & TRACE_FLAG_CUSTOM_DATA:
                         trace_type = TRACE_TYPE_CUSTOM_DATA
                         state = STATE_READ_CUSTOM_DATA_ADDR
+                    elif read_data_flags & TRACE_FLAG_LOG_DATA:
+                        trace_type = TRACE_TYPE_LOG_DATA
+                        state = STATE_READ_LOG_DATA_LEN
                     else:
                         trace_type = TRACE_TYPE_FUNC
                         state = STATE_READ_CONTEXT
@@ -178,6 +221,8 @@ def _read_data(f):
                     _read_func_data(read_data)
                 elif trace_type == TRACE_TYPE_CUSTOM_DATA:
                     _read_custom_data(read_data)
+                elif trace_type == TRACE_TYPE_LOG_DATA:
+                    _read_log_data(read_data)
                 else:
                     # Unknown trace type. Ignore
                     state == STATE_READ_MAGIC
