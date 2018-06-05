@@ -21,6 +21,11 @@ is going to be traced.
 Each function must save the current value of *PC* and *LR* in to a trace buffer
 from where the tracer can collect the data.
 
+From version 0.2 the tool has been extended to support a few additional features:
+
+- Data hexdumps
+- ASCII logs
+
 Format of the trace data
 ========================
 
@@ -28,22 +33,20 @@ A typical Cortex-M based MCU has very little memory, so it is important to
 keep the trace data as small as possible. As result of this, the tracer uses
 binary data instead of ASCII.
 
-Below is an outline of one chunk of trace data::
+Below is an outline of one chunk of function trace data::
 
-    +----------+-------+--------+--------+--------+
-    | syncbits | flags | invect |   PC   |   LR   |
-    +----------+-------+--------+--------+--------+
-     2 bits     5 bits  9 bits   32 bits  32 bits
+    +----------+---------------+--------+--------+--------+
+    | syncbits | flags present | invect |   PC   |   LR   |
+    +----------+---------------+--------+--------+--------+
+     6 bits     1 bit          9 bits   32 bits  32 bits
 
-The sync bits are a sequence of two ones (0b11) that tells the tracer that
+The sync bits are a sequence of bits (0b110000) that tells the tracer that
 this is the start of a new trace chunk. The reason for having a sync sequence
 is to let the tracer re-sync in case data gets corrupted or lost.
 
 On a cortex-M MCU, the code memory is in the range [0 .. 0x1ffffff].
 This means that the value of *PC* and *LR* should never start with the sync bit
 sequence. Hence the likelihood for re-syncing on the wrong byte is minimal.
-
-Currently no flags are used, so these bits are reserved for future use.
 
 The intvect contains the interrupt vector number and is used by the tracer
 to tell from which context the function was called from (which interrupt).
@@ -56,6 +59,71 @@ See ARM infocenter for more info about the ICSR register:
 http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0552a/CIHFDJCA.html
 
 *PC* and *LR* are written in big endian format (makes it easier to view hexdumps).
+
+The *flags present* bit indicates that the trace chunk contains flags.
+If set, the chunk will look like this::
+
+    +----------+-------------------+-------+-----------------------------------+
+    | syncbits | flags present (1) | flags | Different data depending on flags |
+    +----------+-------------------+-------+-----------------------------------+
+     6 bits     1 bit               8 bits  X bits
+
+Currently, the below flags are supported::
+
+    MORE_FLAGS = 1
+    DATA_DUMP  = 2
+    ASCII_LOG  = 4
+
+In case *flags present* is not set, the data will always be interpreted as a
+function trace chunk.
+
+Special traces
+==============
+
+As mentioned before, the trace data will have a different interpretation depending
+on the flags.
+
+Data dump trace
+---------------
+
+Below is an outline of one chunk of data dump trace::
+
+    +----------+-------------------+-----------+--------+-----------+----------+------+
+    | syncbits | flags present (1) | flags (2) | unused | data addr | data len | data |
+    +----------+-------------------+-----------+--------+-----------+----------+------+
+     6 bits     1 bit               8 bits      1 bit    32 bits     16 bits
+
+Example::
+
+    +----------+---------------+----------+----+----------+-----+------+
+    | syncbits | flags present | flags    | DC | addr     | len | data |
+    +----------+---------------+----------+----+----------+-----+------+
+    |  110000  | 1             | 00000001 | X  | 1000.... | ... | ...  |
+    +----------+---------------+----------+----+----------+-----+------+
+    Hex:
+    |             C2              |     02     | 8....
+
+
+
+ASCII log trace
+---------------
+
+Below is an outline of one chunk of ASCII log trace::
+
+    +----------+-------------------+-----------+--------+---------+------------+
+    | syncbits | flags present (1) | flags (4) | unused | log len | ASCII data |
+    +----------+-------------------+-----------+--------+---------+------------+
+     6 bits     1 bit               8 bits      1 bit    16 bits
+
+Example (4 byte string)::
+
+    +----------+---------------+----------+----+-------------------+------+
+    | syncbits | flags present | flags    | DC | len               | data |
+    +----------+---------------+----------+----+-------------------+------+
+    |  110000  | 1             | 00000010 | X  | 00000000 00001000 | ...  |
+    +----------+---------------+----------+----+-------------------+------+
+    Hex:
+    |             C2              |     04     |       00 04       | ...
 
 Limitations/TODO
 =================
