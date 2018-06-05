@@ -64,7 +64,10 @@ def _print_custom_data(custom_data_ba, custom_data_addr, data_len):
 
 def _print_log_data(log_data_ba, log_data_len):
 
-    print("LOG: {}".format(log_data_ba.decode("utf-8")))
+    try:
+        print("LOG: {}".format(log_data_ba.decode("utf-8")))
+    except UnicodeDecodeError:
+        sys.stderr.write('Bad log message (UnicodeDecodeError) of length {} bytes\n'.format(log_data_len))
 
 def _read_func_data(read_data):
 
