@@ -8,6 +8,7 @@ from cortexm_tracer import InterruptContext_STM32
 
 
 STATE_READ_MAGIC = 0
+STATE_READ_MORE_FLAGS = 9
 STATE_READ_CONTEXT = 1
 STATE_READ_PC = 2
 STATE_READ_LR = 3
@@ -20,8 +21,9 @@ STATE_READ_LOG_DATA_LEN = 7
 STATE_READ_LOG_DATA = 8
 
 # Trace flags
-TRACE_FLAG_CUSTOM_DATA = 1
-TRACE_FLAG_LOG_DATA = 2
+TRACE_FLAG_MORE_FLAGS = 1
+TRACE_FLAG_CUSTOM_DATA = (1 << 1)
+TRACE_FLAG_LOG_DATA = (1 << 2)
 
 # Trace types
 TRACE_TYPE_FUNC = 0
@@ -199,12 +201,8 @@ def _read_data(f):
                 read_data_magic = read_data[0] & 0xfc
                 read_data_flags = (read_data[0] & ~0xfc) >> 1
                 if read_data_magic == 0xc0:
-                    if read_data_flags & TRACE_FLAG_CUSTOM_DATA:
-                        trace_type = TRACE_TYPE_CUSTOM_DATA
-                        state = STATE_READ_CUSTOM_DATA_ADDR
-                    elif read_data_flags & TRACE_FLAG_LOG_DATA:
-                        trace_type = TRACE_TYPE_LOG_DATA
-                        state = STATE_READ_LOG_DATA_LEN
+                    if read_data_flags:
+                        state = STATE_READ_MORE_FLAGS
                     else:
                         trace_type = TRACE_TYPE_FUNC
                         state = STATE_READ_CONTEXT
@@ -216,6 +214,17 @@ def _read_data(f):
                         print("*** WARNING ***")
                         print("*** Missing syncword!")
                     resync_cnt += 1
+            elif state == STATE_READ_MORE_FLAGS:
+                read_data_flags = (read_data[0] & 0xfe) >> 1
+                if read_data_flags & TRACE_FLAG_CUSTOM_DATA:
+                    trace_type = TRACE_TYPE_CUSTOM_DATA
+                    state = STATE_READ_CUSTOM_DATA_ADDR
+                elif read_data_flags & TRACE_FLAG_LOG_DATA:
+                    trace_type = TRACE_TYPE_LOG_DATA
+                    state = STATE_READ_LOG_DATA_LEN
+                else:
+                    trace_type = TRACE_TYPE_FUNC
+                    state = STATE_READ_CONTEXT
             else:
                 if trace_type == TRACE_TYPE_FUNC:
                     _read_func_data(read_data)
